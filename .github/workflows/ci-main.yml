@@ -28,6 +28,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           target: wasm32-unknown-unknown
+          profile: minimal
 
       - name: Check if Release
         id: release_type_check
