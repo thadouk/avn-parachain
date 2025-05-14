@@ -24,8 +24,12 @@ jobs:
         with:
           crate: cargo-edit
           version: '0.13.1'
-      - name: Install build target
-        run: rustup target add wasm32-unknown-unknown
+      - name: Install Rust targets
+        uses: actions-rs/toolchain@v1
+        with:
+          target: wasm32-unknown-unknown
+          profile: minimal
+
       - name: Check if Release
         id: release_type_check
         env:
