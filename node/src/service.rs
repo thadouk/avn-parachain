@@ -2,7 +2,6 @@
 
 // std
 use codec::Encode;
-use futures::lock::Mutex;
 use runtime_common::opaque::{Block, Hash};
 use sc_client_api::Backend;
 use sp_core::offchain::OffchainStorage;
@@ -43,8 +42,8 @@ use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{avn_config::*, RuntimeApi};
-use avn_service::{self, web3_utils::Web3Data};
 use cumulus_client_service::ParachainHostFunctions;
+use external_service::node_integration::{self, NodeDeps};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 
 #[docify::export(wasm_executor)]
@@ -449,43 +448,35 @@ pub async fn start_parachain_node(
             _ => Err("Keystore must be local"),
         }?;
 
-        let eth_web3_url = avn_cli_config
-            .ethereum_node_urls
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "".to_string());
-        let avn_config = avn_service::Config::<Block, _> {
+        let node_deps = NodeDeps::<Block, _> {
             keystore: params.keystore_container.local_keystore(),
             keystore_path: keystore_path.clone(),
             avn_port: avn_port.clone(),
-            eth_node_url: eth_web3_url,
-            web3_data_mutex: Arc::new(Mutex::new(Web3Data::new())),
+            eth_node_urls: avn_cli_config.ethereum_node_urls.clone(),
             client: client.clone(),
-            _block: Default::default(),
+            offchain_transaction_pool_factory: OffchainTransactionPoolFactory::new(
+                transaction_pool.clone(),
+            ),
         };
 
-        let eth_event_handler_config =
-            avn_service::ethereum_events_handler::EthEventHandlerConfig::<Block, _> {
-                keystore: params.keystore_container.local_keystore(),
-                keystore_path: keystore_path.clone(),
-                avn_port: avn_port.clone(),
-                eth_node_urls: avn_cli_config.ethereum_node_urls.clone(),
-                web3_data_mutexes: Default::default(),
-                client: client.clone(),
-                offchain_transaction_pool_factory: OffchainTransactionPoolFactory::new(
-                    transaction_pool.clone(),
-                ),
-            };
+        let avn_state = node_integration::build_app_state(&node_deps).map_err(|e| {
+            sc_service::Error::Other(format!("external-service init failed: {e:?}"))
+        })?;
+
+        let eth_event_handler_config = node_integration::build_eth_event_handler_config(node_deps);
 
         task_manager.spawn_essential_handle().spawn(
-            "avn-service",
+            "external-service",
             None,
-            avn_service::start(avn_config),
+            external_service::server::start(avn_state),
         );
+
         task_manager.spawn_essential_handle().spawn(
             "eth-events-handler",
             None,
-            avn_service::ethereum_events_handler::start_eth_event_handler(eth_event_handler_config),
+            external_service::ethereum_events_handler::start_eth_event_handler(
+                eth_event_handler_config,
+            ),
         );
 
         start_consensus(
