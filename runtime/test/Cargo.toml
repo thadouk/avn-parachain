@@ -112,7 +112,6 @@ pallet-cross-chain-voting-runtime-api.workspace = true
 
 # Common Runtime
 runtime-common.workspace = true
-node-primitives.workspace = true
 
 [features]
 default = [
@@ -157,7 +156,6 @@ std = [
 	"parachains-common/std",
 	"polkadot-parachain-primitives/std",
 	"polkadot-runtime-common/std",
-	"node-primitives/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
@@ -181,8 +179,6 @@ std = [
 	"pallet-avn-anchor/std",
 	"pallet-avn-proxy/std",
 	"pallet-avn-offence-handler/std",
-	"pallet-cross-chain-voting/std",
-	"pallet-cross-chain-voting-runtime-api/std",
 	"pallet-eth-bridge/std",
 	"pallet-eth-bridge-runtime-api/std",
 	"pallet-ethereum-events/std",

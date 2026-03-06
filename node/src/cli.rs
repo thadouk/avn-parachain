@@ -60,6 +60,9 @@ pub struct AvnRunCmd {
     #[arg(long = "ethereum-node-url", value_name = "ETH URL", num_args = 0..=32)]
     pub eth_node_urls: Vec<String>,
 
+    /// Flag to specify the Id of a registered Aventus cloud node
+    #[arg(long = "registered-node-id", value_name = "Registered Node Id")]
+    pub registered_node_id: Option<String>,
     /// Enable the transaction filter: reject extrinsics at the node (e.g. for public RPC)
     /// before they enter the pool, using the runtime's call filter policy.
     #[arg(long = "enable-transaction-filter")]

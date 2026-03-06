@@ -39,12 +39,12 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_runtime::Perbill;
 use sp_version::RuntimeVersion;
 
-use runtime_common::{
-    constants::{currency::*, time::*},
-    OperationalFeeMultiplier,
-};
+use runtime_common::OperationalFeeMultiplier;
 
-use sp_avn_common::event_discovery::filters::{AllEventsFilter, NoEventsFilter};
+use sp_avn_common::{
+    constants::{currency::*, time::*},
+    event_discovery::filters::{AllEventsFilter, NoEventsFilter},
+};
 use sp_core::{ConstU128, H160};
 use sp_runtime::{traits::ConvertInto, transaction_validity::TransactionPriority};
 use sp_watchtower::NoopWatchtower;
@@ -138,6 +138,9 @@ impl cumulus_pallet_weight_reclaim::Config for Runtime {
 impl pallet_timestamp::Config for Runtime {
     /// A timestamp: milliseconds since the unix epoch.
     type Moment = Moment;
+    #[cfg(feature = "runtime-benchmarks")]
+    type OnTimestampSet = ();
+    #[cfg(not(feature = "runtime-benchmarks"))]
     type OnTimestampSet = Aura;
     type MinimumPeriod = ConstU64<0>;
     type WeightInfo = ();

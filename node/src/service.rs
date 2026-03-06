@@ -4,6 +4,7 @@
 use codec::Encode;
 use runtime_common::opaque::{Block, Hash};
 use sc_client_api::Backend;
+use sp_avn_common::REGISTERED_NODE_KEY;
 use sp_core::offchain::OffchainStorage;
 use std::{sync::Arc, time::Duration};
 
@@ -318,7 +319,7 @@ pub async fn start_parachain_node(
     let inner_pool = params.transaction_pool.clone();
     let transaction_pool = Arc::new(FilteredPool::new(params.transaction_pool, filter));
     let import_queue_service = params.import_queue.service();
-
+    let offchain_worker_enabled = parachain_config.offchain_worker.enabled;
     let avn_port = avn_cli_config.avn_port.clone();
 
     // NOTE: because we use Aura here explicitly, we can use `CollatorSybilResistance::Resistant`
@@ -337,9 +338,10 @@ pub async fn start_parachain_node(
         })
         .await?;
 
-    if parachain_config.offchain_worker.enabled {
+    if offchain_worker_enabled {
         use futures::FutureExt;
 
+        let maybe_registered_node_id = avn_cli_config.registered_node_id.clone();
         let port_number = avn_port
             .clone()
             .unwrap_or_else(|| DEFAULT_EXTERNAL_SERVICE_PORT_NUMBER.to_string());
@@ -350,6 +352,20 @@ pub async fn start_parachain_node(
                 EXTERNAL_SERVICE_PORT_NUMBER_KEY,
                 &port_number.encode(),
             );
+
+            // If the node is run with the --registered-node-id flag,
+            // set the registered node key in the offchain storage
+            if let Some(registered_node_id) = maybe_registered_node_id {
+                if hex::decode(registered_node_id.clone()).is_ok() {
+                    local_db.set(
+                        sp_core::offchain::STORAGE_PREFIX,
+                        REGISTERED_NODE_KEY,
+                        &registered_node_id.encode(),
+                    );
+                } else {
+                    log::warn!("✋ Invalid nodeId: {:?} found. NodeId must be a hex public key without the 0x.", registered_node_id);
+                }
+            }
         }
 
         let offchain_workers =
@@ -442,7 +458,7 @@ pub async fn start_parachain_node(
         sync_service: sync_service.clone(),
     })?;
 
-    if validator {
+    if validator || offchain_worker_enabled {
         let keystore_path = match parachain_config_keystore {
             KeystoreConfig::Path { path, password: _ } => Ok(path.clone()),
             _ => Err("Keystore must be local"),
@@ -463,38 +479,40 @@ pub async fn start_parachain_node(
             sc_service::Error::Other(format!("external-service init failed: {e:?}"))
         })?;
 
-        let eth_event_handler_config = node_integration::build_eth_event_handler_config(node_deps);
-
         task_manager.spawn_essential_handle().spawn(
             "external-service",
             None,
             external_service::server::start(avn_state),
         );
 
-        task_manager.spawn_essential_handle().spawn(
-            "eth-events-handler",
-            None,
-            external_service::ethereum_events_handler::start_eth_event_handler(
-                eth_event_handler_config,
-            ),
-        );
+        if validator {
+            let eth_event_handler_config =
+                node_integration::build_eth_event_handler_config(node_deps);
+            task_manager.spawn_essential_handle().spawn(
+                "eth-events-handler",
+                None,
+                external_service::ethereum_events_handler::start_eth_event_handler(
+                    eth_event_handler_config,
+                ),
+            );
 
-        start_consensus(
-            client.clone(),
-            backend,
-            block_import,
-            prometheus_registry.as_ref(),
-            telemetry.as_ref().map(|t| t.handle()),
-            &task_manager,
-            relay_chain_interface,
-            transaction_pool,
-            params.keystore_container.keystore(),
-            relay_chain_slot_duration,
-            para_id,
-            collator_key.expect("Command line arguments do not allow this. qed"),
-            overseer_handle,
-            announce_block,
-        )?;
+            start_consensus(
+                client.clone(),
+                backend,
+                block_import,
+                prometheus_registry.as_ref(),
+                telemetry.as_ref().map(|t| t.handle()),
+                &task_manager,
+                relay_chain_interface,
+                transaction_pool,
+                params.keystore_container.keystore(),
+                relay_chain_slot_duration,
+                para_id,
+                collator_key.expect("Command line arguments do not allow this. qed"),
+                overseer_handle,
+                announce_block,
+            )?;
+        }
     }
 
     Ok((task_manager, client))

@@ -8,13 +8,12 @@ use crate::chain_spec::{
     constants::*, helpers::*, AuraId, AuthorityDiscoveryId, AvnId, EthPublicKey, ImOnlineId, ParaId,
 };
 use avn_parachain_runtime::{self as avn_runtime};
-use node_primitives::AccountId;
 
 use sp_core::{H160, H256};
 
 use hex_literal::hex;
-use sp_avn_common::eth::EthereumNetwork;
-use sp_runtime::{traits::ConstU32, BoundedVec};
+use sp_avn_common::{eth::EthereumNetwork, primitives::AccountId};
+use sp_runtime::{traits::ConstU32, BoundedVec, Perbill};
 
 /// Generate the session keys from individual elements.
 ///
@@ -126,6 +125,17 @@ pub(crate) fn testnet_genesis(
             "avtTokenContract": avt_token_contract,
             "lowerSchedulePeriod": 10,
             "balances": token_balances,
+        },
+        "nodeManager": {
+            "rewardPeriod": 30u32,
+            "maxBatchSize": 10u32,
+            "heartbeatPeriod": 10u32,
+            "rewardAmount": 20 * AVT,
+            "autoStakeDurationSec": 60 * 5 as u64, // 5 min
+            "maxUnstakePercentage": Perbill::from_percent(10),
+            "unstakePeriodSec": 60u64, // 1 min
+            "restrictedUnstakeDurationSec": 60 * 10 as u64, // 10 min
+            "appChainFeePercentage": Perbill::from_percent(0),
         }
     })
 }

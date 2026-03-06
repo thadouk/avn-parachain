@@ -1749,7 +1749,6 @@ dependencies = [
  "hex-literal",
  "jsonrpsee",
  "log",
- "node-primitives",
  "pallet-avn",
  "pallet-eth-bridge",
  "pallet-eth-bridge-runtime-api",
@@ -1828,7 +1827,6 @@ dependencies = [
  "frame-try-runtime",
  "hex-literal",
  "log",
- "node-primitives",
  "pallet-assets",
  "pallet-aura",
  "pallet-authority-discovery",
@@ -1848,6 +1846,7 @@ dependencies = [
  "pallet-im-online",
  "pallet-message-queue",
  "pallet-nft-manager",
+ "pallet-node-manager",
  "pallet-offences",
  "pallet-parachain-staking",
  "pallet-preimage",
@@ -1856,12 +1855,14 @@ dependencies = [
  "pallet-session",
  "pallet-sudo",
  "pallet-summary",
+ "pallet-summary-watchtower",
  "pallet-timestamp",
  "pallet-token-manager",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-utility",
  "pallet-validators-manager",
+ "pallet-watchtower",
  "pallet-whitelist",
  "pallet-xcm",
  "parachains-common",
@@ -1920,7 +1921,6 @@ dependencies = [
  "frame-try-runtime",
  "hex-literal",
  "log",
- "node-primitives",
  "pallet-assets",
  "pallet-aura",
  "pallet-authority-discovery",
@@ -1991,10 +1991,10 @@ version = "8.7.0"
 dependencies = [
  "frame-support",
  "log",
- "node-primitives",
  "parity-scale-codec",
  "scale-info",
  "smallvec",
+ "sp-avn-common",
  "sp-runtime",
 ]
 
@@ -4767,7 +4767,6 @@ dependencies = [
  "futures",
  "hex",
  "log",
- "node-primitives",
  "pallet-eth-bridge-runtime-api",
  "parity-scale-codec",
  "sc-client-api",
@@ -8222,14 +8221,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43794a0ace135be66a25d3ae77d41b91615fb68ae937f904090203e81f755b65"
 
 [[package]]
-name = "node-primitives"
-version = "8.7.0"
-dependencies = [
- "sp-core",
- "sp-runtime",
-]
-
-[[package]]
 name = "nodrop"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9017,9 +9008,9 @@ dependencies = [
 name = "pallet-cross-chain-voting-runtime-api"
 version = "8.7.0"
 dependencies = [
- "node-primitives",
  "parity-scale-codec",
  "sp-api",
+ "sp-avn-common",
  "sp-core",
  "sp-std",
 ]
@@ -9418,6 +9409,33 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
  "scale-info",
+]
+
+[[package]]
+name = "pallet-node-manager"
+version = "8.7.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "log",
+ "pallet-avn",
+ "pallet-balances",
+ "pallet-session",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "parking_lot 0.12.3",
+ "scale-info",
+ "sp-application-crypto",
+ "sp-avn-common",
+ "sp-core",
+ "sp-io",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-state-machine",
+ "sp-std",
+ "test-case",
 ]
 
 [[package]]
@@ -9932,6 +9950,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-summary-watchtower"
+version = "8.7.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "log",
+ "pallet-avn",
+ "pallet-balances",
+ "pallet-node-manager",
+ "pallet-summary",
+ "pallet-timestamp",
+ "pallet-watchtower",
+ "parity-scale-codec",
+ "parking_lot 0.12.3",
+ "scale-info",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-avn-common",
+ "sp-core",
+ "sp-io",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-state-machine",
+ "sp-std",
+ "sp-watchtower",
+]
+
+[[package]]
 name = "pallet-timestamp"
 version = "39.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10149,6 +10197,35 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-runtime",
+]
+
+[[package]]
+name = "pallet-watchtower"
+version = "8.7.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "log",
+ "pallet-avn",
+ "pallet-balances",
+ "pallet-node-manager",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "parking_lot 0.12.3",
+ "scale-info",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-avn-common",
+ "sp-core",
+ "sp-io",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-state-machine",
+ "sp-std",
+ "sp-watchtower",
+ "test-case",
 ]
 
 [[package]]
@@ -15620,6 +15697,7 @@ dependencies = [
  "async-trait",
  "byte-slice-cast",
  "derive_more 0.99.17",
+ "frame-support",
  "hex",
  "hex-literal",
  "impl-trait-for-tuples",
@@ -17064,6 +17142,39 @@ name = "termtree"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
+
+[[package]]
+name = "test-case"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb2550dd13afcd286853192af8601920d959b14c401fcece38071d53bf0768a8"
+dependencies = [
+ "test-case-macros",
+]
+
+[[package]]
+name = "test-case-core"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adcb7fd841cd518e279be3d5a3eb0636409487998a4aff22f3de87b81e88384f"
+dependencies = [
+ "cfg-if 1.0.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
+name = "test-case-macros"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c89e72a01ed4c579669add59014b9a524d609c0c88c6a585ce37485879f6ffb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+ "test-case-core",
+]
 
 [[package]]
 name = "thiserror"

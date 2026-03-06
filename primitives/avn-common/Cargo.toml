@@ -27,6 +27,7 @@ sp-core.workspace = true
 sp-std.workspace = true
 sp-runtime = { workspace = true, features = ["serde"]}
 sp-io.workspace = true
+frame-support = { workspace = true }
 
 # Node-only (transaction filter)
 sc-transaction-pool-api = { workspace = true, optional = true }
@@ -55,6 +56,7 @@ std = [
 	"sp-std/std",
 	"sp-io/std",
 	"sp-runtime/std",
+	"frame-support/std",
 	"libsecp256k1/std",
 	"sha3/std",
 	"alloy-primitives/std",

@@ -11,7 +11,7 @@ rust-version.workspace = true
 [dependencies]
 alloy = { version = "=1.6.3", features = ["providers", "rpc-types", "transports", "signers"] }
 alloy-primitives = { version = "=1.5.4" }
-alloy-signer-local = { version = "=1.6.3" } 
+alloy-signer-local = { version = "=1.6.3" }
 async-trait = "0.1"
 axum = "0.8"
 codec = { workspace = true, default-features = true }
@@ -39,5 +39,4 @@ sc-keystore = { default-features = true, workspace = true }
 sc-client-api = { default-features = true, workspace = true }
 sc-client-db = { default-features = true, workspace = true }
 sc-transaction-pool-api = { default-features = true, workspace = true }
-node-primitives = { default-features = true, workspace = true }
 client-extrinsic-utils = { workspace = true }
