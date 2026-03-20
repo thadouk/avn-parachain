@@ -1,3 +1,5 @@
+// Copyright 2026 Aventus DAO Ltd
+
 use crate::*;
 use frame_support::storage::{with_transaction, TransactionOutcome};
 use sp_runtime::{traits::UniqueSaturatedInto, FixedPointNumber, FixedU128};
