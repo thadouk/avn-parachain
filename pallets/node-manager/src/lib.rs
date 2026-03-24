@@ -29,7 +29,8 @@ use sp_application_crypto::RuntimeAppPublic;
 use sp_avn_common::{
     eth::EthereumId,
     event_types::{EthEvent, EventData, ProcessedEventHandler, TotalSupplyUpdatedData, Validator},
-    BridgeContractMethod, PaymentHandler, REGISTERED_NODE_KEY,
+    AppChainInterface, BridgeContractMethod, PaymentHandler, RewardPeriodIndex,
+    REGISTERED_NODE_KEY,
 };
 use sp_core::{MaxEncodedLen, H160};
 use sp_runtime::{
@@ -99,6 +100,7 @@ const PAYOUT_REWARD_CONTEXT: &'static [u8] = b"NodeManager_RewardPayout";
 const MINT_REWARDS_CONTEXT: &'static [u8] = b"NodeManager_MintRewards";
 const HEARTBEAT_CONTEXT: &'static [u8] = b"NodeManager_heartbeat";
 const MAX_BATCH_SIZE: u32 = 1_000;
+const MINT_SAFETY_CAP_MULTIPLIER: u32 = 4;
 pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 pub const SIGNED_REGISTER_NODE_CONTEXT: &[u8] = b"register_node";
 pub const SIGNED_DEREGISTER_NODE_CONTEXT: &[u8] = b"deregister_node";
@@ -131,7 +133,6 @@ pub(crate) type BalanceOf<T> =
 pub(crate) type PositiveImbalanceOf<T> = <<T as Config>::Currency as Currency<
     <T as frame_system::Config>::AccountId,
 >>::PositiveImbalance;
-pub(crate) type RewardPeriodIndex = u64;
 /// Node account ID
 pub(crate) type NodeId<T> = <T as frame_system::Config>::AccountId;
 /// Max nodes per deregistration call
@@ -613,10 +614,12 @@ pub mod pallet {
         type VirtualNodeStake: Get<BalanceOf<Self>>;
         /// Extrinsic weight provider
         type WeightInfo: WeightInfo;
-
+        /// Interface to the Ethereum bridge pallet
         type BridgeInterface: BridgeInterface;
-
+        /// Hook to check for processed events
         type ProcessedEventsChecker: ProcessedEventsChecker;
+        /// Interface to interact with app chains
+        type AppChainInterface: AppChainInterface<AccountId = Self::AccountId>;
     }
 
     #[pallet::call]
@@ -655,7 +658,7 @@ pub mod pallet {
             .max(<T as Config>::WeightInfo::set_admin_config_max_unstake_percentage())
             .max(<T as Config>::WeightInfo::set_admin_config_unstake_period())
             .max(<T as Config>::WeightInfo::set_admin_config_restricted_unstake_duration())
-            .max(<T as Config>::WeightInfo::set_admin_config_appchain_fee_percentage())
+            .max(<T as Config>::WeightInfo::set_admin_config_reward_fee_percentage())
         )]
         pub fn set_admin_config(
             origin: OriginFor<T>,
@@ -765,7 +768,7 @@ pub mod pallet {
                 AdminConfig::RewardFee(percentage) => {
                     <RewardFeePercentage<T>>::put(percentage);
                     Self::deposit_event(Event::RewardFeePercentageSet { percentage });
-                    Ok(Some(<T as Config>::WeightInfo::set_admin_config_appchain_fee_percentage())
+                    Ok(Some(<T as Config>::WeightInfo::set_admin_config_reward_fee_percentage())
                         .into())
                 },
             }
@@ -841,10 +844,16 @@ pub mod pallet {
                     reward_pot.reward_end_time,
                 );
 
-                let reward_amount =
+                let (reward_amount, reward_percentage) =
                     Self::calculate_reward(node_weight, &total_uptime.total_weight, &total_reward)?;
 
-                Self::pay_reward(&oldest_period, node.clone(), &node_info, reward_amount)?;
+                Self::pay_reward(
+                    &oldest_period,
+                    node.clone(),
+                    &node_info,
+                    reward_amount,
+                    reward_percentage,
+                )?;
                 Ok(())
             };
 
@@ -1221,6 +1230,10 @@ pub mod pallet {
                 *outstanding = outstanding.saturating_add(reward_amount);
             });
 
+            // Notify app chains that a new reward period has started.
+            let hook_weight =
+                T::AppChainInterface::on_new_reward_period(&next_reward_period.current);
+
             Self::deposit_event(Event::NewRewardPeriodStarted {
                 reward_period_index: next_reward_period.current,
                 reward_period_length: next_reward_period.length,
@@ -1229,6 +1242,7 @@ pub mod pallet {
             });
 
             <T as Config>::WeightInfo::on_initialise_with_new_reward_period()
+                .saturating_add(hook_weight)
         }
 
         fn offchain_worker(n: BlockNumberFor<T>) {
@@ -1281,7 +1295,7 @@ pub mod pallet {
                         signature,
                     ) {
                         ValidTransaction::with_tag_prefix("NodeManagerPayout")
-                            .and_provides((call, reward_period_index))
+                            .and_provides((PAYOUT_REWARD_CONTEXT, reward_period_index, author))
                             .priority(TransactionPriority::max_value() - reduce_priority)
                             .longevity(64_u64)
                             // We don't propagate this transaction,
@@ -1324,7 +1338,12 @@ pub mod pallet {
                             }
 
                             return ValidTransaction::with_tag_prefix("NodeManagerHeartbeat")
-                                .and_provides(call)
+                                .and_provides((
+                                    HEARTBEAT_CONTEXT,
+                                    node,
+                                    reward_period_index,
+                                    heartbeat_count,
+                                ))
                                 .priority(TransactionPriority::max_value() - reduce_priority)
                                 .longevity(64_u64)
                                 .build()
@@ -1348,7 +1367,7 @@ pub mod pallet {
                         signature,
                     ) {
                         ValidTransaction::with_tag_prefix("NodeManagerMint")
-                            .and_provides(call)
+                            .and_provides((MINT_REWARDS_CONTEXT, amount, author))
                             .priority(TransactionPriority::max_value() - reduce_priority)
                             .longevity(64_u64)
                             .propagate(false)
@@ -1564,28 +1583,76 @@ pub mod pallet {
                 return None
             }
 
-            let num_periods_to_mint = NumPeriodsToMint::<T>::get();
-            if num_periods_to_mint == 0 {
+            let num_periods = NumPeriodsToMint::<T>::get();
+            if num_periods == 0 {
                 return None
             }
 
-            let reward_amount_per_period = NextRewardAmountPerPeriod::<T>::get();
-            if reward_amount_per_period == BalanceOf::<T>::zero() {
+            let reward_per_period = NextRewardAmountPerPeriod::<T>::get();
+            if reward_per_period == BalanceOf::<T>::zero() {
                 return None
             }
 
-            let outstanding_to_pay = OutstandingRewardToPay::<T>::get();
-            let window = reward_amount_per_period.checked_mul(&(num_periods_to_mint.into()))?;
-
-            let low_watermark = outstanding_to_pay.checked_add(&window)?;
-            let high_watermark = low_watermark.checked_add(&window)?;
-
+            let outstanding = OutstandingRewardToPay::<T>::get();
             let current_balance = Self::reward_pot_balance();
-            if current_balance >= low_watermark {
+
+            // N periods of runway
+            let runway = reward_per_period.checked_mul(&(num_periods.into())).or_else(|| {
+                log::error!(
+                    "💔 Mint overflow: reward_per_period * num_periods ({:?} * {:?})",
+                    reward_per_period,
+                    num_periods
+                );
                 None
-            } else {
-                high_watermark.checked_sub(&current_balance)
+            })?;
+
+            // Mint triggers when pot drops below this (N periods of buffer above obligations)
+            let refill_threshold = outstanding.checked_add(&runway).or_else(|| {
+                log::error!(
+                    "💔 Mint overflow: outstanding + runway ({:?} + {:?})",
+                    outstanding,
+                    runway
+                );
+                None
+            })?;
+
+            // After minting, pot should reach this (2N periods of buffer above obligations)
+            let target = refill_threshold.checked_add(&runway).or_else(|| {
+                log::error!(
+                    "💔 Mint overflow: refill_threshold + runway ({:?} + {:?})",
+                    refill_threshold,
+                    runway
+                );
+                None
+            })?;
+
+            if current_balance >= refill_threshold {
+                // We have enough in the pot to cover obligations + runway, no need to mint yet
+                return None
             }
+
+            let mint_amount = target.checked_sub(&current_balance).or_else(|| {
+                log::error!(
+                    "💔 Mint underflow: target - balance ({:?} - {:?})",
+                    target,
+                    current_balance
+                );
+                None
+            })?;
+
+            // In normal operation mint ≈ runway (N × reward).
+            // Add a cap as a safety ceiling.
+            let max_mint = runway.saturating_mul(MINT_SAFETY_CAP_MULTIPLIER.into());
+            if mint_amount > max_mint {
+                log::error!(
+                    "💔💔 Mint amount {:?} exceeds safety cap {:?} ({} x N x reward). There might be bridge issues or payout has stalled.",
+                    mint_amount, max_mint, MINT_SAFETY_CAP_MULTIPLIER
+                );
+
+                return None
+            }
+
+            Some(mint_amount)
         }
 
         /// Insert signing key reverse index. Fails if key already belongs to another node.
